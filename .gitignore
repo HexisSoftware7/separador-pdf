@@ -1,0 +1,10 @@
+# datos sensibles / generados, nunca subir
+*.pdf
+salidas/
+*_separado/
+tessdata/
+debug_*.txt
+
+__pycache__/
+*.pyc
+.env

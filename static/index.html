@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Separador de PDF</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#0f1115; color:#e8e8e8; margin:0; padding:40px; }
+  .caja { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color:#9aa0a6; margin-top:0; }
+  #soltar {
+    border: 2px dashed #3a3f4b; border-radius: 12px; padding: 48px 20px;
+    text-align:center; cursor:pointer; transition: border-color .15s, background .15s;
+  }
+  #soltar.activo { border-color:#4f8cff; background:#161a23; }
+  #soltar p { margin:0; color:#c7c9cc; }
+  input[type=file] { display:none; }
+  #estado { margin-top:16px; min-height: 20px; color:#9aa0a6; }
+  #resultado { margin-top:24px; }
+  .item {
+    display:flex; justify-content:space-between; align-items:center;
+    background:#161a23; border:1px solid #262b36; border-radius:8px;
+    padding:10px 14px; margin-bottom:8px;
+  }
+  .item a { color:#4f8cff; text-decoration:none; font-weight:600; }
+  .item a:hover { text-decoration:underline; }
+  .nombre { color:#e8e8e8; }
+  #zip { margin-top:14px; display:inline-block; color:#4f8cff; cursor:pointer; }
+  .barra { height:4px; background:#262b36; border-radius:2px; overflow:hidden; margin-top:14px; display:none; }
+  .barra div { height:100%; width:30%; background:#4f8cff; animation: mover 1s infinite linear; }
+  @keyframes mover { from { margin-left:-30%; } to { margin-left:100%; } }
+</style>
+</head>
+<body>
+<div class="caja">
+  <h1>Separador de PDF</h1>
+  <p class="sub">Sube el PDF combinado, sale cada documento separado y listo para descargar.</p>
+
+  <div id="soltar">
+    <p>Arrastra el PDF aqui o haz clic para elegirlo</p>
+    <input type="file" id="archivo" accept="application/pdf">
+  </div>
+
+  <div class="barra" id="barra"><div></div></div>
+  <div id="estado"></div>
+  <div id="resultado"></div>
+</div>
+
+<script>
+const soltar = document.getElementById('soltar');
+const input = document.getElementById('archivo');
+const estado = document.getElementById('estado');
+const resultado = document.getElementById('resultado');
+const barra = document.getElementById('barra');
+
+soltar.addEventListener('click', () => input.click());
+soltar.addEventListener('dragover', e => { e.preventDefault(); soltar.classList.add('activo'); });
+soltar.addEventListener('dragleave', () => soltar.classList.remove('activo'));
+soltar.addEventListener('drop', e => {
+  e.preventDefault();
+  soltar.classList.remove('activo');
+  if (e.dataTransfer.files.length) subir(e.dataTransfer.files[0]);
+});
+input.addEventListener('change', () => {
+  if (input.files.length) subir(input.files[0]);
+});
+
+async function subir(archivo) {
+  if (!archivo.name.toLowerCase().endsWith('.pdf')) {
+    estado.textContent = 'Solo se aceptan archivos PDF.';
+    return;
+  }
+  resultado.innerHTML = '';
+  estado.textContent = `Separando "${archivo.name}"... (puede tardar segun cantidad de paginas)`;
+  barra.style.display = 'block';
+
+  const datos = new FormData();
+  datos.append('archivo', archivo);
+
+  try {
+    const resp = await fetch('/separar', { method: 'POST', body: datos });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || 'Error al separar el PDF');
+    }
+    const data = await resp.json();
+    mostrarResultado(data);
+    estado.textContent = `${data.archivos.length} documentos generados.`;
+  } catch (e) {
+    estado.textContent = 'Error: ' + e.message;
+  } finally {
+    barra.style.display = 'none';
+  }
+}
+
+function mostrarResultado(data) {
+  resultado.innerHTML = '';
+  data.archivos.forEach(nombre => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `<span class="nombre">${nombre}</span><a href="/descargar/${data.job_id}/${nombre}" download>Descargar</a>`;
+    resultado.appendChild(div);
+  });
+  const zip = document.createElement('a');
+  zip.id = 'zip';
+  zip.href = `/descargar_zip/${data.job_id}`;
+  zip.textContent = 'Descargar todo en .zip (sin comprimir, rapido)';
+  resultado.appendChild(zip);
+}
+</script>
+</body>
+</html>

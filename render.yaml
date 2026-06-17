@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: separador-pdf
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 8000

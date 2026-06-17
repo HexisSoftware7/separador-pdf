@@ -1,0 +1,9 @@
+services:
+  sep-pdf:
+    build: .
+    container_name: sep_pdf
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./salidas:/app/salidas
+    restart: unless-stopped

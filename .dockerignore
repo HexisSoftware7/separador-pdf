@@ -1,0 +1,6 @@
+tessdata/
+salidas/
+*_separado/
+documentos neila.pdf
+__pycache__/
+*.pyc
