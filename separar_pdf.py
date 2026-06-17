@@ -29,26 +29,38 @@ if Path(TESSERACT_EXE_WINDOWS).exists():
 # clausulas legales, etc). Orden = prioridad: las mas especificas primero,
 # el comodin "CERTIFICA QUE" de ultimo para no robarle paginas a carnet,
 # colpensiones, etc.
-VENTANA_ENCABEZADO = 350  # caracteres desde el inicio de la pagina
+VENTANA_ENCABEZADO = 600  # caracteres desde el inicio de la pagina
 
 MARCADORES = [
     (r"CARNET", "carnet_manipulacion"),
     (r"IDENTIFICACION\s+PERSONAL", "cedula"),
+    (r"(?s)REPUBLICA\s*DE\s*COLOMBIA.{0,150}C[EÉ]DULA\s*DE\s*CIUDADAN[IÍ]A", "cedula"),
     (r"INSTITUCI[OÓ]N\s+EDUCATIVA|CONFIERE\s+A|BACHILLER", "diploma"),
     (r"PROCURADUR", "antecedentes_procuraduria"),
     (r"POLIC[IÍ\.]A\s+NACIONAL", "antecedentes_policia"),
     (r"CONTRALOR", "antecedentes_contraloria"),
     (r"PERSONER[IÍ]A", "antecedentes_personeria"),
     (r"NOTARIA|DECLARACI[OÓ]N\s+EXTRAJ", "declaracion_notarial"),
-    (r"SALUD\s*TOTAL", "eps"),
+    (r"SALUD\s*TOTAL|\bADRES\b|\bBDUA\b", "eps"),
     (r"COLPENSIONES", "colpensiones"),
     (r"HISTORIA\s+LABORAL", "historia_laboral"),
     (r"PORVENIR|FONDO\s+DE\s+CESANT", "cesantias"),
     (r"HOJA\s+DE\s+VIDA", "hoja_de_vida"),
-    (r"\bCERTIFICA\s*[:\.]?\s*(QUE)?\b", "certificacion_laboral"),
+    (r"\bCERTIFICA\s*[:\.]?\s*(QUE)?\b|HACE\s+CONSTAR|CERTIFICACI[OÓ]N\s+LABORAL", "certificacion_laboral"),
     (r"^\s*\d{1,2}\s+de\s+\w+\s+(de\s+)?\d{4}", "carta_referencia"),  # carta con fecha al inicio
 ]
 MARCADORES = [(re.compile(p, re.IGNORECASE | re.MULTILINE), n) for p, n in MARCADORES]
+
+# Palabras comunes del español que casi siempre aparecen en una frase real
+# (carta, referencia, certificacion corta escrita a mano). Sirven para
+# distinguir una pagina con contenido legible de una pagina puramente
+# decorativa (sello, firma escaneada, QR, ruido de OCR) que no debe arrancar
+# un documento nuevo por si sola.
+PALABRAS_COMUNES = re.compile(
+    r"\b(?:de|la|el|que|con|los|las|una|por|para|del|certifico|identificad\w*|se[ñn]or\w*|a[ñn]os|hace)\b",
+    re.IGNORECASE,
+)
+UMBRAL_TEXTO_CARTA = 600  # pagina corta + texto legible = carta/certificacion aparte
 
 # Tipos de documento que repiten su encabezado en cada pagina (reportes
 # multi-pagina, p.ej colpensiones o historia laboral). Si el mismo tipo
@@ -62,10 +74,18 @@ def clasificar(texto: str) -> str | None:
     for patron, nombre in MARCADORES:
         if patron.search(encabezado):
             return nombre
-    # Sin encabezado reconocible (firma escaneada, hoja en blanco, foto
-    # borrosa, carta a mano sin fecha legible): se pega al documento
-    # anterior en vez de inventar un corte. Mejor unir de mas que separar
-    # de mas.
+    # Sin encabezado institucional reconocido. Si la pagina es corta Y tiene
+    # texto legible de verdad (varias palabras comunes en español), es
+    # probable que sea una carta/certificacion corta aparte (referencia
+    # personal, familiar, etc) y no continuacion del documento anterior.
+    texto_limpio = texto.strip()
+    if len(texto_limpio) < UMBRAL_TEXTO_CARTA:
+        coincidencias = len(PALABRAS_COMUNES.findall(texto_limpio))
+        if coincidencias >= 4:
+            return "carta_manual"
+    # Pagina puramente decorativa (firma escaneada, sello, QR, ruido de
+    # OCR) o continuacion larga: se pega al documento anterior en vez de
+    # inventar un corte. Mejor unir de mas que separar de mas.
     return None
 
 
