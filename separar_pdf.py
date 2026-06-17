@@ -89,15 +89,35 @@ def clasificar(texto: str) -> str | None:
     return None
 
 
-def ocr_pagina(doc: "fitz.Document", indice: int, zoom: float = 2.0) -> str:
-    pagina = doc[indice]
-    matriz = fitz.Matrix(zoom, zoom)
-    pix = pagina.get_pixmap(matrix=matriz)
-    img_bytes = pix.tobytes("png")
+def _contar_palabras_legibles(texto: str) -> int:
+    return sum(1 for w in texto.split() if len(w) > 3 and w.isalpha())
+
+
+def _renderizar_pagina(pagina, zoom: float):
     import io
     from PIL import Image
-    img = Image.open(io.BytesIO(img_bytes))
-    return pytesseract.image_to_string(img, lang="spa+eng", config="--psm 6")
+    matriz = fitz.Matrix(zoom, zoom)
+    pix = pagina.get_pixmap(matrix=matriz)
+    return Image.open(io.BytesIO(pix.tobytes("png")))
+
+
+def ocr_pagina(doc: "fitz.Document", indice: int, zoom: float = 2.0) -> str:
+    pagina = doc[indice]
+    img = _renderizar_pagina(pagina, zoom)
+    texto = pytesseract.image_to_string(img, lang="spa+eng", config="--psm 6")
+
+    # Si salio poco texto legible (logos/sellos decorativos, baja calidad
+    # de escaneo, contraste pobre), se reintenta con mas resolucion,
+    # contraste realzado y segmentacion automatica de pagina completa.
+    if _contar_palabras_legibles(texto) < 8:
+        from PIL import ImageOps
+        img_grande = _renderizar_pagina(pagina, 4.0).convert("L")
+        img_grande = ImageOps.autocontrast(img_grande, cutoff=2)
+        texto_reintento = pytesseract.image_to_string(img_grande, lang="spa+eng", config="--psm 3")
+        if _contar_palabras_legibles(texto_reintento) > _contar_palabras_legibles(texto):
+            texto = texto_reintento
+
+    return texto
 
 
 UMBRAL_TEXTO_VACIO = 20  # menos que esto = se asume pagina-imagen sin texto real
